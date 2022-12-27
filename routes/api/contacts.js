@@ -3,6 +3,7 @@ const Joi = require('joi')
 const Contact = require('../../models/contacts')
 
 const { createError } = require('../../helpers')
+const { authorize } = require('../../middlewares')
 
 const router = express.Router()
 
@@ -27,7 +28,7 @@ const updateFavoriteSchema = Joi.object({
   favorite: Joi.boolean().required(),
 })
 
-router.get('/', async (req, res, next) => {
+router.get('/', authorize, async (req, res, next) => {
   try {
     const result = await Contact.find({}, 'name email phone')
     res.json(result)
@@ -36,7 +37,7 @@ router.get('/', async (req, res, next) => {
   }
 })
 
-router.get('/:contactId', async (req, res, next) => {
+router.get('/:contactId', authorize, async (req, res, next) => {
   try {
     const { contactId } = req.params
     const result = await Contact.findById(contactId)
@@ -49,7 +50,7 @@ router.get('/:contactId', async (req, res, next) => {
   }
 })
 
-router.post('/', async (req, res, next) => {
+router.post('/', authorize, async (req, res, next) => {
   try {
     const { error } = contactSchema.validate(req.body)
     if (error) {
@@ -65,7 +66,7 @@ router.post('/', async (req, res, next) => {
   }
 })
 
-router.delete('/:contactId', async (req, res, next) => {
+router.delete('/:contactId', authorize, async (req, res, next) => {
   try {
     const { contactId } = req.params
 
@@ -82,7 +83,7 @@ router.delete('/:contactId', async (req, res, next) => {
   }
 })
 
-router.put('/:contactId', async (req, res, next) => {
+router.put('/:contactId', authorize, async (req, res, next) => {
   try {
     const { error } = contactSchema.validate(req.body)
     if (error) {
@@ -101,7 +102,7 @@ router.put('/:contactId', async (req, res, next) => {
   }
 })
 
-router.patch('/:contactId/favorite', async (req, res, next) => {
+router.patch('/:contactId/favorite', authorize, async (req, res, next) => {
   try {
     const { contactId } = req.params
     const { error } = updateFavoriteSchema.validate(req.body)
