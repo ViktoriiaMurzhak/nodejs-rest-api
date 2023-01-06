@@ -6,7 +6,8 @@ const gravatar = require('gravatar')
 const path = require('path')
 const fs = require('fs/promises')
 const Jimp = require('jimp')
-const { createError, createHashPassword } = require('../../helpers')
+const { createError, createHashPassword, sendMail } = require('../../helpers')
+const { nanoid } = require('nanoid')
 
 const User = require('../../models/users')
 const { authorize, upload } = require('../../middlewares')
@@ -22,6 +23,13 @@ const registerUserSchema = Joi.object({
 
 const loginUserSchema = Joi.object({
   password: Joi.string().min(6).required(),
+  email: Joi.string()
+    // eslint-disable-next-line no-useless-escape
+    .pattern(/^\w+([\.-]?\w+)*@\w+([\.-]?\w+)*(\.\w{2,3})+$/)
+    .required(),
+})
+
+const verifyUserSchema = Joi.object({
   email: Joi.string()
     // eslint-disable-next-line no-useless-escape
     .pattern(/^\w+([\.-]?\w+)*@\w+([\.-]?\w+)*(\.\w{2,3})+$/)
@@ -47,13 +55,24 @@ router.post('/register', async (req, res, next) => {
 
     const hashPassword = await createHashPassword(password)
     const avatarURL = gravatar.url(email)
+    const verificationToken = nanoid()
 
     const newUser = await User.create({
       email,
       name,
       password: hashPassword,
       avatarURL,
+      verificationToken,
     })
+
+    const mail = {
+      to: email,
+      subject: 'Email verification',
+      html: `<a href='http://localhost:3000/api/auth/verify/${verificationToken}'>Verify user</a>`,
+    }
+
+    await sendMail(mail)
+
     res.status(201).json({
       user: {
         email: newUser.email,
@@ -61,6 +80,49 @@ router.post('/register', async (req, res, next) => {
         subscription: newUser.subscription,
       },
     })
+  } catch (error) {
+    next(error)
+  }
+})
+
+router.get('/verify/:verificationToken', async (req, res, next) => {
+  try {
+    const { verificationToken } = req.params
+    const user = await User.findOne({ verificationToken })
+    if (!user) {
+      throw createError(404, 'User not found')
+    }
+    await User.findByIdAndUpdate(user._id, {
+      verify: true,
+      verificationToken: '',
+    })
+    res.json({ message: 'Verification successful' })
+  } catch (error) {
+    next(error)
+  }
+})
+
+router.post('/verify', async (req, res, next) => {
+  try {
+    const { error } = verifyUserSchema.validate(req.body)
+    if (error) {
+      throw createError(400, 'error.message')
+    }
+    const { email } = req.body
+    const user = await User.findOne(email)
+    if (!user) {
+      throw createError(404, 'User not found')
+    }
+    if (user.verify) {
+      throw createError(400, 'Verification has already been passed')
+    }
+    const mail = {
+      to: email,
+      subject: 'Email verification',
+      html: `<a href='http://localhost:3000/api/auth/verify/${user.verificationToken}'>Verify user</a>`,
+    }
+    await sendMail(mail)
+    res.json({ message: 'Verification email sent' })
   } catch (error) {
     next(error)
   }
